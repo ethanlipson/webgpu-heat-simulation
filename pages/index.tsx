@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import Renderer from '../src/renderer';
+import Space from '../src/space';
 import fragmentSrc from '../src/shaders/fragment';
 import vertexSrc from '../src/shaders/vertex';
 
@@ -30,8 +30,16 @@ export default function Home() {
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
       });
 
-      const renderer = new Renderer(device, context);
-      renderer.render();
+      const space = new Space(device, context);
+
+      const loop = () => {
+        space.step();
+        space.render();
+
+        requestAnimationFrame(loop);
+      };
+
+      requestAnimationFrame(loop);
     };
 
     run();
