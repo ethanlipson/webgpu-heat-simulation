@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import Space from '../src/space';
-import fragmentSrc from '../src/shaders/fragment';
-import vertexSrc from '../src/shaders/vertex';
+import fragmentSrc from '../src/shaders/render/fragment';
+import vertexSrc from '../src/shaders/render/vertex';
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -30,7 +30,7 @@ export default function Home() {
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
       });
 
-      const space = new Space(device, context);
+      const space = new Space(device, context, 200, 200);
 
       const loop = () => {
         space.step();

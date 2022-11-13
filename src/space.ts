@@ -1,7 +1,8 @@
 import { createBuffer } from './common';
-import computeSrc from './shaders/compute';
-import fragmentSrc from './shaders/fragment';
-import vertexSrc from './shaders/vertex';
+import copySrc from './shaders/compute/copy';
+import diffuseSrc from './shaders/compute/diffuse';
+import fragmentSrc from './shaders/render/fragment';
+import vertexSrc from './shaders/render/vertex';
 
 class Space {
   device: GPUDevice;
@@ -9,14 +10,26 @@ class Space {
   canvas: HTMLCanvasElement;
 
   renderPipeline: GPURenderPipeline;
-  computePipeline: GPUComputePipeline;
+  diffusePipeline: GPUComputePipeline;
+  copyPipeline: GPUComputePipeline;
   verticesBuffer: GPUBuffer;
   bindGroup: GPUBindGroup;
 
-  constructor(device: GPUDevice, context: GPUCanvasContext) {
+  numCellsX: number;
+  numCellsY: number;
+
+  constructor(
+    device: GPUDevice,
+    context: GPUCanvasContext,
+    numCellsX: number,
+    numCellsY: number
+  ) {
     this.device = device;
     this.context = context;
     this.canvas = context.canvas as HTMLCanvasElement;
+
+    this.numCellsX = numCellsX;
+    this.numCellsY = numCellsY;
 
     // prettier-ignore
     const vertices = new Float32Array([
@@ -40,7 +53,19 @@ class Space {
       GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       [this.canvas.width, this.canvas.height]
     );
-    const heatBuffer = createBuffer(device, 4, GPUBufferUsage.STORAGE, [0.5]);
+    const heatBuffer = createBuffer(
+      device,
+      numCellsX * numCellsY * 4,
+      GPUBufferUsage.STORAGE,
+      Array(numCellsX * numCellsY)
+        .fill(0)
+        .map((_, i) => (i < (numCellsX * numCellsY) / 2 ? 1 : 0))
+    );
+    const heatCopyBuffer = createBuffer(
+      device,
+      numCellsX * numCellsY * 4,
+      GPUBufferUsage.STORAGE
+    );
 
     const uniformBindGroupLayoutEntries: GPUBindGroupLayoutEntry[] = [
       {
@@ -51,6 +76,11 @@ class Space {
       {
         binding: 1,
         visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
+        buffer: { type: 'storage' },
+      },
+      {
+        binding: 2,
+        visibility: GPUShaderStage.COMPUTE,
         buffer: { type: 'storage' },
       },
     ];
@@ -65,6 +95,7 @@ class Space {
         },
       },
       { binding: 1, resource: { buffer: heatBuffer } },
+      { binding: 2, resource: { buffer: heatCopyBuffer } },
     ];
     this.bindGroup = device.createBindGroup({
       layout: bindGroupLayout,
@@ -73,7 +104,8 @@ class Space {
 
     const vertModule = device.createShaderModule({ code: vertexSrc });
     const fragModule = device.createShaderModule({ code: fragmentSrc });
-    const compModule = device.createShaderModule({ code: computeSrc });
+    const diffuseModule = device.createShaderModule({ code: diffuseSrc });
+    const copyModule = device.createShaderModule({ code: copySrc });
 
     const vertexAttribDesc: GPUVertexAttribute = {
       shaderLocation: 0,
@@ -103,26 +135,41 @@ class Space {
         module: fragModule,
         entryPoint: 'main',
         targets: [colorState],
+        constants: { 0: numCellsX, 1: numCellsY },
       },
       primitive: {
         topology: 'triangle-list',
       },
     });
 
-    this.computePipeline = device.createComputePipeline({
+    this.diffusePipeline = device.createComputePipeline({
       layout: device.createPipelineLayout({
         bindGroupLayouts: [bindGroupLayout],
       }),
-      compute: { module: compModule, entryPoint: 'main' },
+      compute: {
+        module: diffuseModule,
+        entryPoint: 'main',
+        constants: { 0: numCellsX, 1: numCellsY },
+      },
+    });
+
+    this.copyPipeline = device.createComputePipeline({
+      layout: device.createPipelineLayout({
+        bindGroupLayouts: [bindGroupLayout],
+      }),
+      compute: { module: copyModule, entryPoint: 'main' },
     });
   }
 
   step() {
     const commandEncoder = this.device.createCommandEncoder();
     const passEncoder = commandEncoder.beginComputePass();
-    passEncoder.setPipeline(this.computePipeline);
+    passEncoder.setPipeline(this.diffusePipeline);
     passEncoder.setBindGroup(0, this.bindGroup);
-    passEncoder.dispatchWorkgroups(1, 1);
+    passEncoder.dispatchWorkgroups(this.numCellsX, this.numCellsY);
+    passEncoder.setPipeline(this.copyPipeline);
+    passEncoder.setBindGroup(0, this.bindGroup);
+    passEncoder.dispatchWorkgroups(this.numCellsX, this.numCellsY);
     passEncoder.end();
 
     this.device.queue.submit([commandEncoder.finish()]);
@@ -146,8 +193,6 @@ class Space {
     const commandEncoder = this.device.createCommandEncoder();
     const passEncoder = commandEncoder.beginRenderPass(renderPassDesc);
     passEncoder.setPipeline(this.renderPipeline);
-    passEncoder.setViewport(0, 0, this.canvas.width, this.canvas.height, 0, 1);
-    passEncoder.setScissorRect(0, 0, this.canvas.width, this.canvas.height);
     passEncoder.setVertexBuffer(0, this.verticesBuffer);
     passEncoder.setBindGroup(0, this.bindGroup);
     passEncoder.draw(6);
