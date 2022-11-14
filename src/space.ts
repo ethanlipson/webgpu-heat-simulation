@@ -1,5 +1,4 @@
 import { createBuffer } from './common';
-import copySrc from './shaders/compute/copy';
 import diffuseSrc from './shaders/compute/diffuse';
 import fragmentSrc from './shaders/render/fragment';
 import vertexSrc from './shaders/render/vertex';
@@ -18,7 +17,6 @@ class Space {
 
   renderPipeline: GPURenderPipeline;
   diffusePipeline: GPUComputePipeline;
-  copyPipeline: GPUComputePipeline;
   verticesBuffer: GPUBuffer;
   heatBuffer: GPUBuffer;
   heatCopyBuffer: GPUBuffer;
@@ -28,7 +26,7 @@ class Space {
   numCellsX: number;
   numCellsY: number;
 
-  mouseState: MouseState = { pressed: 'none', x: 0, y: 0, r: 30 };
+  mouseState: MouseState = { pressed: 'none', x: 0, y: 0, r: 20 };
 
   constructor(
     device: GPUDevice,
@@ -117,7 +115,6 @@ class Space {
     const vertModule = device.createShaderModule({ code: vertexSrc });
     const fragModule = device.createShaderModule({ code: fragmentSrc });
     const diffuseModule = device.createShaderModule({ code: diffuseSrc });
-    const copyModule = device.createShaderModule({ code: copySrc });
 
     const vertexAttribDesc: GPUVertexAttribute = {
       shaderLocation: 0,
@@ -163,13 +160,6 @@ class Space {
         entryPoint: 'main',
         constants: { 0: numCellsX, 1: numCellsY },
       },
-    });
-
-    this.copyPipeline = device.createComputePipeline({
-      layout: device.createPipelineLayout({
-        bindGroupLayouts: [bindGroupLayout],
-      }),
-      compute: { module: copyModule, entryPoint: 'main' },
     });
   }
 

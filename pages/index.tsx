@@ -8,7 +8,7 @@ export default function Home() {
     pressed: 'none',
     x: 0,
     y: 0,
-    r: 30,
+    r: 20,
   });
 
   useEffect(() => {
