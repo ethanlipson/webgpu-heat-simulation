@@ -3,12 +3,12 @@ const copySrc = /* wgsl */ `
     lattice: array<f32>
   }
 
-  @group(0) @binding(1) var<storage, read_write> heatData: HeatData;
-  @group(0) @binding(2) var<storage, read_write> heatDeltas: HeatData;
+  @group(0) @binding(0) var<storage, read_write> heatData: HeatData;
+  @group(0) @binding(1) var<storage, read_write> heatDataCopy: HeatData;
 
   @compute @workgroup_size(1, 1)
   fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    heatData.lattice[global_id.y * 200 + global_id.x] += heatDeltas.lattice[global_id.y * 200 + global_id.x];
+    heatData.lattice[global_id.x] = heatDataCopy.lattice[global_id.x];
   }
 `;
 

@@ -1,10 +1,15 @@
-import { useEffect, useRef } from 'react';
-import Space from '../src/space';
-import fragmentSrc from '../src/shaders/render/fragment';
-import vertexSrc from '../src/shaders/render/vertex';
+import { useEffect, useRef, useState } from 'react';
+import Space, { MouseState } from '../src/space';
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const spaceRef = useRef<Space | null>(null);
+  const [mouseState, setMouseState] = useState<MouseState>({
+    pressed: 'none',
+    x: 0,
+    y: 0,
+    r: 30,
+  });
 
   useEffect(() => {
     const run = async () => {
@@ -30,9 +35,17 @@ export default function Home() {
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
       });
 
-      const space = new Space(device, context, 200, 200);
+      spaceRef.current = new Space(
+        device,
+        context,
+        500,
+        Math.floor((500 * canvas.height) / canvas.width)
+      );
 
       const loop = () => {
+        const space = spaceRef.current;
+        if (!space) return;
+
         space.step();
         space.render();
 
@@ -45,5 +58,47 @@ export default function Home() {
     run();
   }, []);
 
-  return <canvas ref={canvasRef} />;
+  useEffect(() => {
+    const space = spaceRef.current;
+    if (!space) return;
+
+    space.setMouseState(mouseState);
+  }, [mouseState]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      onMouseMove={e => {
+        if (!canvasRef.current) return;
+        const rect = canvasRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = rect.bottom - e.clientY;
+
+        setMouseState(mouseState => ({ ...mouseState, x, y }));
+      }}
+      onMouseDown={e => {
+        if (e.button === 0) {
+          setMouseState(mouseState => ({ ...mouseState, pressed: 'left' }));
+        } else if (e.button === 2) {
+          setMouseState(mouseState => ({ ...mouseState, pressed: 'right' }));
+        }
+      }}
+      onMouseUp={e => {
+        const unpressedCurrentButton =
+          (e.button === 0 && mouseState.pressed === 'left') ||
+          (e.button === 2 && mouseState.pressed === 'right');
+
+        if (unpressedCurrentButton) {
+          setMouseState(mouseState => ({ ...mouseState, pressed: 'none' }));
+        }
+      }}
+      onScroll={e => {
+        setMouseState(mouseState => ({
+          ...mouseState,
+          r: Math.max(mouseState.r + Math.sign(e.detail), 0),
+        }));
+      }}
+      onContextMenu={e => e.preventDefault()}
+    />
+  );
 }

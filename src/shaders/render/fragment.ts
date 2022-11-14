@@ -11,8 +11,7 @@ const fragmentSrc = /* wgsl */ `
   @id(0) override numCellsX: f32;
   @id(1) override numCellsY: f32;
 
-  @group(0) @binding(0) var<uniform> uniforms: UniformData;
-  @group(0) @binding(1) var<storage, read_write> heatData: HeatData;
+  @group(0) @binding(0) var<storage, read_write> heatData: HeatData;
 
   fn getVal(coords: vec2<i32>) -> f32 {
     let index = coords.y * i32(numCellsX) + coords.x;

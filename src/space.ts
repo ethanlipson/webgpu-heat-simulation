@@ -4,6 +4,13 @@ import diffuseSrc from './shaders/compute/diffuse';
 import fragmentSrc from './shaders/render/fragment';
 import vertexSrc from './shaders/render/vertex';
 
+export type MouseState = {
+  pressed: 'left' | 'right' | 'none';
+  x: number;
+  y: number;
+  r: number;
+};
+
 class Space {
   device: GPUDevice;
   context: GPUCanvasContext;
@@ -13,10 +20,15 @@ class Space {
   diffusePipeline: GPUComputePipeline;
   copyPipeline: GPUComputePipeline;
   verticesBuffer: GPUBuffer;
+  heatBuffer: GPUBuffer;
+  heatCopyBuffer: GPUBuffer;
+  uniformBuffer: GPUBuffer;
   bindGroup: GPUBindGroup;
 
   numCellsX: number;
   numCellsY: number;
+
+  mouseState: MouseState = { pressed: 'none', x: 0, y: 0, r: 30 };
 
   constructor(
     device: GPUDevice,
@@ -47,55 +59,55 @@ class Space {
       GPUBufferUsage.VERTEX,
       vertices
     );
-    const uniformBuffer = createBuffer(
-      device,
-      8,
-      GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-      [this.canvas.width, this.canvas.height]
-    );
-    const heatBuffer = createBuffer(
+    this.heatBuffer = createBuffer(
       device,
       numCellsX * numCellsY * 4,
-      GPUBufferUsage.STORAGE,
+      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
       Array(numCellsX * numCellsY)
         .fill(0)
         .map((_, i) => (i < (numCellsX * numCellsY) / 2 ? 1 : 0))
     );
-    const heatCopyBuffer = createBuffer(
+    this.heatCopyBuffer = createBuffer(
       device,
       numCellsX * numCellsY * 4,
-      GPUBufferUsage.STORAGE
+      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+    );
+    this.uniformBuffer = createBuffer(
+      device,
+      16,
+      GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      [0, 0, 0, 10]
     );
 
-    const uniformBindGroupLayoutEntries: GPUBindGroupLayoutEntry[] = [
+    const bindGroupLayoutEntries: GPUBindGroupLayoutEntry[] = [
       {
         binding: 0,
-        visibility: GPUShaderStage.FRAGMENT,
-        buffer: { type: 'uniform' },
+        visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
+        buffer: { type: 'storage' },
       },
       {
         binding: 1,
-        visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
+        visibility: GPUShaderStage.COMPUTE,
         buffer: { type: 'storage' },
       },
       {
         binding: 2,
         visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: 'storage' },
+        buffer: { type: 'uniform' },
       },
     ];
     const bindGroupLayout = device.createBindGroupLayout({
-      entries: uniformBindGroupLayoutEntries,
+      entries: bindGroupLayoutEntries,
     });
     const bindGroupEntries: GPUBindGroupEntry[] = [
+      { binding: 0, resource: { buffer: this.heatBuffer } },
+      { binding: 1, resource: { buffer: this.heatCopyBuffer } },
       {
-        binding: 0,
+        binding: 2,
         resource: {
-          buffer: uniformBuffer,
+          buffer: this.uniformBuffer,
         },
       },
-      { binding: 1, resource: { buffer: heatBuffer } },
-      { binding: 2, resource: { buffer: heatCopyBuffer } },
     ];
     this.bindGroup = device.createBindGroup({
       layout: bindGroupLayout,
@@ -162,15 +174,33 @@ class Space {
   }
 
   step() {
+    const mouseButton =
+      this.mouseState.pressed === 'left'
+        ? 1
+        : this.mouseState.pressed === 'right'
+        ? 2
+        : 0;
+    const arrayBuffer = new Float32Array([
+      mouseButton,
+      this.mouseState.x / this.canvas.width,
+      this.mouseState.y / this.canvas.height,
+      this.mouseState.r,
+    ]);
+    this.device.queue.writeBuffer(this.uniformBuffer, 0, arrayBuffer);
+
     const commandEncoder = this.device.createCommandEncoder();
     const passEncoder = commandEncoder.beginComputePass();
+    passEncoder.setBindGroup(0, this.bindGroup);
     passEncoder.setPipeline(this.diffusePipeline);
-    passEncoder.setBindGroup(0, this.bindGroup);
-    passEncoder.dispatchWorkgroups(this.numCellsX, this.numCellsY);
-    passEncoder.setPipeline(this.copyPipeline);
-    passEncoder.setBindGroup(0, this.bindGroup);
     passEncoder.dispatchWorkgroups(this.numCellsX, this.numCellsY);
     passEncoder.end();
+    commandEncoder.copyBufferToBuffer(
+      this.heatCopyBuffer,
+      0,
+      this.heatBuffer,
+      0,
+      this.numCellsX * this.numCellsY * 4
+    );
 
     this.device.queue.submit([commandEncoder.finish()]);
   }
@@ -199,6 +229,10 @@ class Space {
     passEncoder.end();
 
     this.device.queue.submit([commandEncoder.finish()]);
+  }
+
+  setMouseState(mouseState: MouseState) {
+    this.mouseState = mouseState;
   }
 }
 
