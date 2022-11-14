@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Space, { MouseState } from '../src/space';
+import styles from './index.module.css';
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -68,6 +69,7 @@ export default function Home() {
   return (
     <canvas
       ref={canvasRef}
+      className={styles.canvas}
       onMouseMove={e => {
         if (!canvasRef.current) return;
         const rect = canvasRef.current.getBoundingClientRect();
@@ -92,10 +94,10 @@ export default function Home() {
           setMouseState(mouseState => ({ ...mouseState, pressed: 'none' }));
         }
       }}
-      onScroll={e => {
+      onWheel={e => {
         setMouseState(mouseState => ({
           ...mouseState,
-          r: Math.max(mouseState.r + Math.sign(e.detail), 0),
+          r: Math.max(mouseState.r - Math.sign(e.deltaY), 5),
         }));
       }}
       onContextMenu={e => e.preventDefault()}
